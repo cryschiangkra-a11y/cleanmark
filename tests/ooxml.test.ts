@@ -1,6 +1,6 @@
 import JSZip from "jszip";
-import { expect, test } from "vitest";
-import { OoxmlPackage, resolvePath } from "../src/core/ooxml/package";
+import { describe, expect, test } from "vitest";
+import { OoxmlPackage, resolvePath, ZipBudgetError } from "../src/core/ooxml/package";
 import { kids, NS, parseXml, toggle } from "../src/core/ooxml/xml";
 
 test("resolvePath 處理相對路徑", () => {
@@ -36,4 +36,37 @@ test("OoxmlPackage 讀 relationships", async () => {
   expect(rels.get("rId1")).toEqual({ id: "rId1", type: "image", target: "word/media/a.png", external: false });
   expect(rels.get("rId2")?.target).toBe("https://example.com");
   expect(pkg.paths().sort()).toEqual(["word/_rels/document.xml.rels", "word/document.xml"]);
+});
+
+describe("OoxmlPackage：防壓縮炸彈", () => {
+  const zipOf = async (files: Record<string, string | Uint8Array>) => {
+    const zip = new JSZip();
+    for (const [k, v] of Object.entries(files)) zip.file(k, v);
+    return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  };
+
+  test("單一檔案報稱超過上限：打開時已經拒絕", async () => {
+    const bomb = await zipOf({ "word/document.xml": new Uint8Array(2 * 1024 * 1024) }); // 2 MB 嘅零，壓縮後好細
+    expect(bomb.length).toBeLessThan(50 * 1024);
+    await expect(OoxmlPackage.open(bomb, { maxTotalBytes: 1024 * 1024, maxEntries: 100 })).rejects.toBeInstanceOf(ZipBudgetError);
+  });
+
+  test("解壓時逐段計數：加埋超過上限就停止", async () => {
+    const pkg = await OoxmlPackage.open(
+      await zipOf({ "a.xml": new Uint8Array(700 * 1024), "b.xml": new Uint8Array(700 * 1024) }),
+      { maxTotalBytes: 1024 * 1024, maxEntries: 100 },
+    );
+    expect((await pkg.bytes("a.xml"))?.length).toBe(700 * 1024);
+    await expect(pkg.bytes("b.xml")).rejects.toBeInstanceOf(ZipBudgetError);
+  });
+
+  test("內部檔案太多就拒絕", async () => {
+    const many = await zipOf(Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`f${i}.xml`, "<x/>"])));
+    await expect(OoxmlPackage.open(many, { maxTotalBytes: 1024 * 1024, maxEntries: 10 })).rejects.toBeInstanceOf(ZipBudgetError);
+  });
+
+  test("同一個檔案讀幾次都只計一次", async () => {
+    const pkg = await OoxmlPackage.open(await zipOf({ "a.xml": "x".repeat(600) }), { maxTotalBytes: 1000, maxEntries: 10 });
+    for (let i = 0; i < 5; i++) expect(await pkg.text("a.xml")).toBe("x".repeat(600));
+  });
 });

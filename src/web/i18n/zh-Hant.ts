@@ -60,6 +60,7 @@ const zhHant = {
   err_tooLarge: "檔案太大，上限是 50 MB。",
   err_encrypted: "檔案有密碼保護，請先移除密碼。",
   err_corrupt: "無法開啟這個檔案，試試用原本的軟體重新儲存。",
+  err_unsafeArchive: "這個檔案解壓縮後大得不正常，為安全起見不處理。",
   err_selfCheckFailed: "新檔案未通過自我檢查，為安全起見不提供下載。",
   err_unknown: "發生未預期的錯誤，請重新整理頁面再試。",
   limitsTitle: "做不到的事",

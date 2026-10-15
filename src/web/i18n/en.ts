@@ -62,6 +62,7 @@ const en: Messages = {
   err_tooLarge: "That file's too big. The limit is 50 MB.",
   err_encrypted: "This file is password-protected. Remove the password first.",
   err_corrupt: "Couldn't open this file. Try saving it again in the app that made it.",
+  err_unsafeArchive: "This file expands to an unusually large size, so it isn't processed for safety.",
   err_selfCheckFailed: "The new file didn't pass the self-check, so it isn't offered for download.",
   err_unknown: "Something unexpected went wrong. Reload the page and try again.",
   limitsTitle: "What it can't do",

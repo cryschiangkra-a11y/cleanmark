@@ -1,6 +1,6 @@
 import { inspectDocx } from "./inspect/docx";
 import type { Choices, CmDocument, Report } from "./model";
-import { OoxmlPackage } from "./ooxml/package";
+import { OoxmlPackage, ZipBudgetError } from "./ooxml/package";
 import { readDocx } from "./readers/docx";
 import { writeCleanDocx } from "./sanitize/package";
 import { selfCheckDocx, type Problem } from "./verify/self-check-docx";
@@ -13,6 +13,7 @@ export type ErrorCode =
   | "tooLarge"
   | "encrypted"
   | "corrupt"
+  | "unsafeArchive" // 解壓之後大得唔正常（壓縮炸彈）
   | "selfCheckFailed";
 
 export class CleanMarkError extends Error {
@@ -56,6 +57,7 @@ export async function analyze(name: string, bytes: Uint8Array): Promise<Analysis
     return { doc, report: await inspectDocx(pkg, doc) };
   } catch (e) {
     if (e instanceof CleanMarkError) throw e;
+    if (e instanceof ZipBudgetError) throw new CleanMarkError("unsafeArchive");
     throw new CleanMarkError("corrupt");
   }
 }
@@ -67,7 +69,13 @@ export interface BuiltFile {
 
 /** 由原檔白名單重新抄寫一份新檔案，自我檢查通過先回傳 */
 export async function build(name: string, original: Uint8Array, choices: Choices): Promise<BuiltFile> {
-  const out = await writeCleanDocx(await OoxmlPackage.open(original), choices);
+  let out: Awaited<ReturnType<typeof writeCleanDocx>>;
+  try {
+    out = await writeCleanDocx(await OoxmlPackage.open(original), choices);
+  } catch (e) {
+    if (e instanceof ZipBudgetError) throw new CleanMarkError("unsafeArchive");
+    throw e;
+  }
   const check = await selfCheckDocx(out.bytes, out.mediaCount);
   if (!check.ok) throw new CleanMarkError("selfCheckFailed", check.problems);
   return { name: outputName(name, "docx"), bytes: out.bytes };

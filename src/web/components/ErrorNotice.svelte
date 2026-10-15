@@ -3,7 +3,7 @@
 
   let { code, problems, onreset }: { code: string; problems: { code: string; detail: string }[]; onreset: () => void } =
     $props();
-  const KNOWN = ["legacyFormat", "unsupported", "tooLarge", "encrypted", "corrupt", "selfCheckFailed"];
+  const KNOWN = ["legacyFormat", "unsupported", "tooLarge", "encrypted", "corrupt", "unsafeArchive", "selfCheckFailed"];
   const key = $derived((KNOWN.includes(code) ? `err_${code}` : "err_unknown") as MessageKey);
 </script>
 

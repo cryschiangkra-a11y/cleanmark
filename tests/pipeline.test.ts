@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { ZIP_LIMITS } from "../src/core/ooxml/package";
 import { analyze, build, CleanMarkError, MAX_BYTES, outputName } from "../src/core/pipeline";
 import { readDocx } from "../src/core/readers/docx";
 import { allParagraphs, paragraphText } from "../src/core/walk";
@@ -25,6 +26,17 @@ describe("analyze：輸入檢查", () => {
     expect(await codeOf("a.docx", new Uint8Array([1, 2, 3, 4]))).toBe("corrupt");
     expect(await codeOf("a.docx", new Uint8Array([0x50, 0x4b, 0x03, 0x04, 9, 9]))).toBe("corrupt");
     expect(await codeOf("A.DOCX", zip)).toBe("ok");
+  });
+
+  test("解壓之後大得唔正常（壓縮炸彈）", async () => {
+    const zip = await buildDocx({ body: p("x".repeat(5000)) });
+    const saved = { ...ZIP_LIMITS };
+    ZIP_LIMITS.maxTotalBytes = 2000;
+    try {
+      expect(await codeOf("a.docx", zip)).toBe("unsafeArchive");
+    } finally {
+      Object.assign(ZIP_LIMITS, saved);
+    }
   });
 
   test("超過 50 MB", async () => {
