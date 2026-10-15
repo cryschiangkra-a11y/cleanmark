@@ -1,6 +1,6 @@
 // 清走圖片入面嘅 metadata（EXIF、XMP、C2PA、文字註解），影像同色彩設定檔保留
 
-type Kind = "png" | "jpg" | "gif" | "bmp";
+type Kind = "png" | "jpg" | "gif" | "bmp" | "webp" | "tiff";
 
 // PNG：只保留影像同顯示需要嘅 chunk
 const PNG_KEEP = new Set(["IHDR", "PLTE", "IDAT", "IEND", "tRNS", "gAMA", "cHRM", "sRGB", "iCCP", "sBIT", "pHYs", "bKGD", "acTL", "fcTL", "fdAT"]);
@@ -101,6 +101,127 @@ function stripBmp(b: Uint8Array): Uint8Array | null {
   return b.slice(0, Math.min(size, b.length)); // 檔案尾嘅多餘資料唔要
 }
 
+// WebP：只保留影像、透明、動畫、色彩設定嘅資料段。EXIF、XMP、C2PA、AIGC（中國 TC260 標識）等一律唔要
+const WEBP_KEEP = new Set(["VP8 ", "VP8L", "VP8X", "ALPH", "ANIM", "ANMF", "ICCP"]);
+
+function stripWebp(b: Uint8Array): Uint8Array | null {
+  if (!startsWithAscii(b, "RIFF") || !startsWithAscii(b, "WEBP", 8)) return null;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const parts: Uint8Array[] = [];
+  for (let o = 12; o + 8 <= b.length; ) {
+    const id = String.fromCharCode(...b.slice(o, o + 4));
+    const len = dv.getUint32(o + 4, true);
+    const end = o + 8 + len + (len % 2);
+    if (end > b.length) return null;
+    if (WEBP_KEEP.has(id)) {
+      const chunk = b.slice(o, end);
+      if (id === "VP8X") chunk[8] &= ~0x0c; // 清走「有 EXIF」「有 XMP」標記
+      parts.push(chunk);
+    }
+    o = end;
+  }
+  const body = concat(parts);
+  const out = new Uint8Array(12 + body.length);
+  out.set(b.slice(0, 12));
+  new DataView(out.buffer).setUint32(4, out.length - 8, true);
+  out.set(body, 12);
+  return out;
+}
+
+// TIFF：只保留顯示影像需要嘅標籤；其他（描述、軟件、作者、時間、XMP、EXIF、GPS、IPTC、Photoshop 等）刪除，資料清零
+const TIFF_KEEP = new Set([
+  254, 255, 256, 257, 258, 259, 262, 263, 266, 273, 274, 277, 278, 279, 280, 281, 282, 283, 284, 290, 291, 296, 297,
+  301, 317, 318, 319, 320, 321, 322, 323, 324, 325, 338, 339, 340, 341, 347, 529, 530, 531, 532, 34675,
+]);
+const TIFF_TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8, 4];
+const TIFF_SUB_IFD = new Set([34665, 34853, 40965]); // EXIF、GPS、Interop 子目錄
+
+interface TiffEntry {
+  at: number;
+  tag: number;
+  type: number;
+  count: number;
+  value: number; // 4 bytes 以內就係值本身，否則係 offset
+}
+
+function tiffReader(b: Uint8Array) {
+  const le = startsWithAscii(b, "II*\0");
+  if (!le && !startsWithAscii(b, "MM\0*")) return null;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const u16 = (o: number) => dv.getUint16(o, le);
+  const u32 = (o: number) => dv.getUint32(o, le);
+  const entries = (ifd: number): TiffEntry[] | null => {
+    if (ifd + 2 > b.length) return null;
+    const n = u16(ifd);
+    if (ifd + 2 + n * 12 + 4 > b.length) return null;
+    return Array.from({ length: n }, (_, i) => {
+      const at = ifd + 2 + i * 12;
+      return { at, tag: u16(at), type: u16(at + 2), count: u32(at + 4), value: u32(at + 8) };
+    });
+  };
+  const payload = (e: TiffEntry): [number, number] | null => {
+    const size = (TIFF_TYPE_SIZE[e.type] ?? 1) * e.count;
+    return size > 4 ? [e.value, Math.min(b.length, e.value + size)] : null;
+  };
+  return { le, dv, u16, u32, entries, payload };
+}
+
+/** 檢查器用：TIFF 入面有冇 EXIF / XMP 標籤（呢啲唔會以 "Exif" 字樣出現） */
+export function tiffMetadataTags(b: Uint8Array): ("exif" | "xmp")[] {
+  const r = tiffReader(b);
+  if (!r) return [];
+  const tags = new Set<string>();
+  for (let ifd = r.u32(4), guard = 0; ifd && guard < 64; guard++) {
+    const es = r.entries(ifd);
+    if (!es) break;
+    for (const e of es) {
+      if (e.tag === 700) tags.add("xmp");
+      if (e.tag === 34665 || e.tag === 34853) tags.add("exif");
+    }
+    ifd = r.u32(ifd + 2 + es.length * 12);
+  }
+  return [...tags] as ("exif" | "xmp")[];
+}
+
+function stripTiff(src: Uint8Array): Uint8Array | null {
+  const b = src.slice();
+  const r = tiffReader(b);
+  if (!r) return null;
+  const zero = (from: number, to: number) => b.fill(0, Math.max(0, from), Math.min(b.length, to));
+  const zeroSubIfd = (ifd: number) => {
+    const es = r.entries(ifd);
+    if (!es) return;
+    for (const e of es) {
+      const p = r.payload(e);
+      if (p) zero(p[0], p[1]);
+    }
+    zero(ifd, ifd + 2 + es.length * 12 + 4);
+  };
+  for (let ifd = r.u32(4), guard = 0; ifd && guard < 64; guard++) {
+    const es = r.entries(ifd);
+    if (!es) return null;
+    const next = r.u32(ifd + 2 + es.length * 12);
+    const kept: Uint8Array[] = [];
+    for (const e of es) {
+      if (TIFF_KEEP.has(e.tag)) {
+        kept.push(b.slice(e.at, e.at + 12));
+        continue;
+      }
+      if (TIFF_SUB_IFD.has(e.tag)) zeroSubIfd(e.value);
+      const p = r.payload(e);
+      if (p) zero(p[0], p[1]);
+    }
+    // 喺原位重寫 IFD：數目、保留嘅項目、下一個 IFD，剩低嘅位清零
+    const total = 2 + es.length * 12 + 4;
+    zero(ifd, ifd + total);
+    r.dv.setUint16(ifd, kept.length, r.le);
+    kept.forEach((k, i) => b.set(k, ifd + 2 + i * 12));
+    r.dv.setUint32(ifd + 2 + kept.length * 12, next, r.le);
+    ifd = next;
+  }
+  return b;
+}
+
 /** 清走圖片 metadata；格式唔啱或者讀唔到就回傳 null（呼叫者會改用佔位圖） */
 export function stripImageMetadata(bytes: Uint8Array, kind: Kind): Uint8Array | null {
   switch (kind) {
@@ -112,6 +233,10 @@ export function stripImageMetadata(bytes: Uint8Array, kind: Kind): Uint8Array | 
       return stripGif(bytes);
     case "bmp":
       return stripBmp(bytes);
+    case "webp":
+      return stripWebp(bytes);
+    case "tiff":
+      return stripTiff(bytes);
   }
 }
 

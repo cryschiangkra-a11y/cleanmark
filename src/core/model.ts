@@ -91,12 +91,12 @@ export interface ImageSlot {
   heightEmu: number;
   context: string; // 位置提示：前面最近嘅標題，冇標題就用前一段文字
   mediaPath: string; // 原檔入面嘅路徑，例如 "word/media/image1.png"
-  contentType: "png" | "jpg" | "gif" | "bmp" | "other";
+  contentType: "png" | "jpg" | "gif" | "bmp" | "webp" | "tiff" | "other";
   keep: boolean; // true = 保留原圖；false = 佔位框（由 applyChoices 設定）
 }
 
 /** 可以原圖放入新檔案嘅圖片格式 */
-export const KEEPABLE_IMAGE_TYPES: ReadonlySet<ImageSlot["contentType"]> = new Set(["png", "jpg", "gif", "bmp"]);
+export const KEEPABLE_IMAGE_TYPES: ReadonlySet<ImageSlot["contentType"]> = new Set(["png", "jpg", "gif", "bmp", "webp", "tiff"]);
 
 export interface PageBreak {
   type: "pageBreak";

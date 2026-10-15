@@ -1,3 +1,5 @@
+import { tiffMetadataTags } from "../sanitize/images";
+
 // 喺 bytes 入面搜尋 ASCII 標記，用嚟認 EXIF / XMP / C2PA
 
 function indexOf(hay: Uint8Array, needle: string): number {
@@ -20,8 +22,9 @@ export function hasC2pa(bytes: Uint8Array): boolean {
 
 export function imageTags(bytes: Uint8Array): ("exif" | "xmp" | "c2pa")[] {
   const tags: ("exif" | "xmp" | "c2pa")[] = [];
-  if (containsAscii(bytes, "Exif\0\0") || containsAscii(bytes, "eXIf")) tags.push("exif");
-  if (containsAscii(bytes, "http://ns.adobe.com/xap/1.0/") || containsAscii(bytes, "XML:com.adobe.xmp")) tags.push("xmp");
+  const tiff = tiffMetadataTags(bytes); // TIFF 嘅 EXIF 係子目錄，唔會以 "Exif" 字樣出現
+  if (containsAscii(bytes, "Exif\0\0") || containsAscii(bytes, "eXIf") || tiff.includes("exif")) tags.push("exif");
+  if (containsAscii(bytes, "http://ns.adobe.com/xap/1.0/") || containsAscii(bytes, "XML:com.adobe.xmp") || tiff.includes("xmp")) tags.push("xmp");
   if (hasC2pa(bytes)) tags.push("c2pa");
   return tags;
 }

@@ -22,13 +22,21 @@ const CORE_PARTS: { type: string; name: string; contentType: string }[] = [
   { type: "endnotes", name: "endnotes.xml", contentType: `${CT_BASE}.endnotes+xml` },
 ];
 
-const IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", bmp: "image/bmp" } as const;
+const IMAGE_TYPES = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  webp: "image/webp",
+  tiff: "image/tiff",
+} as const;
 type ImageExt = keyof typeof IMAGE_TYPES;
 
 function imageExt(path: string): ImageExt | null {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   if (ext === "jpeg" || ext === "jpg") return "jpg";
-  return ext === "png" || ext === "gif" || ext === "bmp" ? ext : null;
+  if (ext === "tif" || ext === "tiff") return "tiff";
+  return ext === "png" || ext === "gif" || ext === "bmp" || ext === "webp" ? ext : null;
 }
 
 const SAFE_URL = /^(https?:|mailto:)/i;

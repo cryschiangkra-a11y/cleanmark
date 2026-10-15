@@ -34,6 +34,8 @@ function contentTypeOf(path: string): ImageSlot["contentType"] {
   if (ext === "jpg" || ext === "jpeg") return "jpg";
   if (ext === "gif") return "gif";
   if (ext === "bmp") return "bmp";
+  if (ext === "webp") return "webp";
+  if (ext === "tif" || ext === "tiff") return "tiff";
   return "other";
 }
 

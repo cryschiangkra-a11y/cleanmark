@@ -190,6 +190,33 @@ describe("writeCleanDocx：用家選擇", () => {
     for (const bytes of Object.values(doc.media)) expect(imageTags(bytes)).toEqual([]);
   });
 
+  test("WebP 同 TIFF 圖片都可以保留，並清走 metadata", async () => {
+    const ascii = (t: string) => Uint8Array.from(t, (c) => c.charCodeAt(0));
+    const webp = (() => {
+      const chunk = (id: string, data: Uint8Array) => {
+        const h = new Uint8Array(8);
+        h.set(ascii(id));
+        new DataView(h.buffer).setUint32(4, data.length, true);
+        return [...h, ...data, ...(data.length % 2 ? [0] : [])];
+      };
+      const body = [...ascii("WEBP"), ...chunk("VP8L", ascii("pix")), ...chunk("EXIF", ascii("Exif\0\0AI"))];
+      const out = new Uint8Array(8 + body.length);
+      out.set(ascii("RIFF"));
+      new DataView(out.buffer).setUint32(4, body.length, true);
+      out.set(body, 8);
+      return out;
+    })();
+    const out = await clean(
+      await buildDocx({ body: imageP("rIdW"), media: [{ rId: "rIdW", name: "a.webp", bytes: webp }] }),
+      { removeParagraphs: [], keepImages: [1] },
+    );
+    const doc = (await readDocx(out)).doc;
+    const [img] = allImages(doc);
+    expect(img.contentType).toBe("webp");
+    expect(imageTags(doc.media[img.mediaPath])).toEqual([]);
+    expect(await partText(out, "[Content_Types].xml")).toContain('Extension="webp" ContentType="image/webp"');
+  });
+
   test("冇揀保留嘅圖片換成同尺寸佔位圖", async () => {
     const out = await clean(await withImages(), { removeParagraphs: [], keepImages: [2] });
     const doc = (await readDocx(out)).doc;
