@@ -36,7 +36,11 @@ function tokens(root: Element, isOriginal: boolean): string[] {
     out.push(`<${name} ${attrs.sort().join(" ")}>`);
     for (let n = el.firstChild; n; n = n.nextSibling) {
       if (n.nodeType === 1) walk(n as Element);
-      else if ((n.nodeType === 3 || n.nodeType === 4) && (n.nodeValue ?? "").trim() !== "") out.push(`"${n.nodeValue}"`);
+      else if (n.nodeType === 3 || n.nodeType === 4) {
+        // 文字元素（w:t、m:t 等）入面嘅空格都要比較；其他地方只係排版用嘅換行縮排
+        const isTextEl = /:(t|instrText|posOffset|align)$/.test(name);
+        if (isTextEl || (n.nodeValue ?? "").trim() !== "") out.push(`"${n.nodeValue}"`);
+      }
     }
     out.push(`</${name}>`);
   };

@@ -31,6 +31,11 @@ CleanMark 唔係「刪除水印」，而係**按白名單重新抄寫一份**：
 - Word 註解同修訂紀錄唔會保留；圖表同 SmartArt 會變成佔位圖
 - 只支援 Word（.docx）
 
+## 安全
+
+- **防壓縮炸彈**：.docx 其實係一個壓縮檔。一個特製嘅細檔案解壓之後可以大到幾 GB，令網頁卡死。CleanMark 會邊解壓邊計實際大細，超過 300 MB 或者內部檔案多過 5,000 個就停止處理（唔會信壓縮檔自己報嘅大細，因為可以作假）
+- **圖片**：PNG、JPEG、GIF、BMP、WebP、TIFF 會清走 EXIF、XMP、C2PA、IPTC、AIGC 等資料之後保留；其他格式（例如 EMF）用同尺寸佔位圖
+
 ## 私隱
 
 - 網頁設定咗 Content Security Policy（`connect-src 'self'`），瀏覽器層面禁止連去任何外部網址
