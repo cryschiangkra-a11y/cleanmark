@@ -55,3 +55,14 @@ test("損壞檔案", async () => {
   const r = await selfCheckDocx(new Uint8Array([1, 2, 3]), 0);
   expect(r.problems[0].code).toBe("unreadable");
 });
+
+test("揀咗換同形字，但新檔仍然有：唔通過", async () => {
+  const bytes = await buildDocx({ body: p("Clаude") });
+  const notFixed = await clean(bytes, { removeParagraphs: [], keepImages: [], fixHomoglyphs: false });
+  const fix = { homoglyphs: true, apostrophes: true, specialSpaces: false };
+  expect((await selfCheckDocx(notFixed.bytes, notFixed.mediaCount, fix)).problems).toEqual([
+    { code: "suspiciousChars", detail: "homoglyphs×1" },
+  ]);
+  const fixed = await clean(bytes, { removeParagraphs: [], keepImages: [] });
+  expect((await selfCheckDocx(fixed.bytes, fixed.mediaCount, fix)).ok).toBe(true);
+});

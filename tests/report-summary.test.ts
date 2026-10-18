@@ -5,6 +5,7 @@ import { findingCount, hiddenTotal } from "../src/web/report-summary";
 const base: Report = {
   fileKind: "docx", visible: [], metadata: [], c2pa: [],
   hidden: { removed: {}, replaced: {}, kept: 0 }, phrases: [], images: [],
+  suspicious: { homoglyphs: [], apostrophes: 0, specialSpaces: {} },
 };
 
 test("乾淨文件 = 0 項", () => {

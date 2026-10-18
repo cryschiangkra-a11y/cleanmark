@@ -2,6 +2,7 @@ import { inspectDocx } from "./inspect/docx";
 import type { Choices, CmDocument, Report } from "./model";
 import { OoxmlPackage, ZipBudgetError } from "./ooxml/package";
 import { readDocx } from "./readers/docx";
+import { suspiciousOptions } from "./clean/suspicious";
 import { writeCleanDocx } from "./sanitize/package";
 import { selfCheckDocx, type Problem } from "./verify/self-check-docx";
 
@@ -76,7 +77,7 @@ export async function build(name: string, original: Uint8Array, choices: Choices
     if (e instanceof ZipBudgetError) throw new CleanMarkError("unsafeArchive");
     throw e;
   }
-  const check = await selfCheckDocx(out.bytes, out.mediaCount);
+  const check = await selfCheckDocx(out.bytes, out.mediaCount, suspiciousOptions(choices));
   if (!check.ok) throw new CleanMarkError("selfCheckFailed", check.problems);
   return { name: outputName(name, "docx"), bytes: out.bytes };
 }

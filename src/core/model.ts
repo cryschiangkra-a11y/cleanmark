@@ -172,6 +172,13 @@ export interface HiddenCharSummary {
   kept: number; // 因為語言需要而保留
 }
 
+/** 可疑字元：AI 可能用嚟喺文字入面藏記號嘅「睇落正常」字元 */
+export interface SuspiciousSummary {
+  homoglyphs: { paragraphId: string; word: string; fixed: string }[]; // 英文字入面夾雜西里爾 / 希臘字母
+  apostrophes: number; // 英文字母之間嘅 U+02BC、U+02B9
+  specialSpaces: Record<string, number>; // 例如 { "U+00A0": 3 }
+}
+
 export interface Report {
   fileKind: "docx";
   visible: VisibleItem[];
@@ -180,6 +187,7 @@ export interface Report {
   hidden: HiddenCharSummary;
   phrases: PhraseItem[];
   images: ImageItem[];
+  suspicious: SuspiciousSummary;
 }
 
 // ── 用家選擇 ─────────────────────────────────────────
@@ -187,4 +195,7 @@ export interface Report {
 export interface Choices {
   removeParagraphs: string[]; // 要刪除嘅段落 id
   keepImages: number[]; // 保留原圖嘅圖片序號，其餘用佔位框
+  fixHomoglyphs?: boolean; // 預設 true
+  fixApostrophes?: boolean; // 預設 true
+  replaceSpecialSpaces?: boolean; // 預設 false：特殊空格好多時係正常排版
 }

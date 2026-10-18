@@ -9,7 +9,8 @@ import {
   type TextInline,
 } from "../model";
 import { mapMathText } from "../math";
-import { mapBlocks } from "../walk";
+import { fixSuspicious, preferredApostrophe, splitByLengths, suspiciousOptions, type SuspiciousOptions } from "./suspicious";
+import { allParagraphs, mapBlocks, paragraphText } from "../walk";
 import { cleanText, emptySummary, hasRtl, mergeSummary } from "./hidden-chars";
 
 /** 清走段落入面嘅隱形字元；上下文用成個段落嘅文字 */
@@ -41,6 +42,17 @@ export function cleanParagraph(p: Paragraph): { paragraph: Paragraph; summary: H
   return { paragraph: { ...p, inlines }, summary };
 }
 
+/** 換可疑字元：成段一齊睇（一個字可能跨幾個格式段），一對一替換後按原本長度切返開 */
+export function fixParagraph(p: Paragraph, opts: SuspiciousOptions): Paragraph {
+  const textInlines = p.inlines.filter((i): i is TextInline => i.type === "text");
+  const joined = textInlines.map((i) => i.text).join("");
+  const fixed = fixSuspicious(joined, opts);
+  if (fixed === joined) return p;
+  const parts = splitByLengths(fixed, textInlines.map((i) => i.text.length));
+  let k = 0;
+  return { ...p, inlines: p.inlines.map((i) => (i.type === "text" ? { ...i, text: parts[k++] } : i)) };
+}
+
 export function cleanParagraphSummary(p: Paragraph): HiddenCharSummary {
   return cleanParagraph(p).summary;
 }
@@ -50,9 +62,10 @@ export function applyChoices(doc: CmDocument, choices: Choices): CmDocument {
   const remove = new Set(choices.removeParagraphs);
   const keep = new Set(choices.keepImages);
   const keptMedia: Record<string, Uint8Array> = {};
+  const opts = suspiciousOptions(choices, preferredApostrophe(allParagraphs(doc).map(paragraphText).join("")));
 
   const fn = (b: Block): Block | null => {
-    if (b.type === "paragraph") return remove.has(b.id) ? null : cleanParagraph(b).paragraph;
+    if (b.type === "paragraph") return remove.has(b.id) ? null : cleanParagraph(fixParagraph(b, opts)).paragraph;
     if (b.type === "image") {
       const canKeep = keep.has(b.index) && KEEPABLE_IMAGE_TYPES.has(b.contentType) && !!doc.media[b.mediaPath];
       if (canKeep) keptMedia[b.mediaPath] = doc.media[b.mediaPath];

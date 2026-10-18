@@ -9,7 +9,7 @@ export default async function globalSetup(): Promise<void> {
     core: { "dc:creator": "ChatGPT" },
     app: { Application: "AI Writer" },
     media: [{ rId: "rIdA", name: "chart.png", bytes: pngWith("c2pa") }],
-    body: p("第一章") + p("營業額\u200B上升 12%") + imageP("rIdA") + p("本文由 AI 協助生成。"),
+    body: p("第一章") + p("Clаude summary") + p("營業額\u200B上升 12%") + imageP("rIdA") + p("本文由 AI 協助生成。"),
   });
   writeFileSync("e2e/.fixtures/sample.docx", bytes);
 }

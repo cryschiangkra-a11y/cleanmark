@@ -6,7 +6,20 @@
     report,
     removeIds = $bindable(),
     keepImages = $bindable(),
-  }: { report: Report; removeIds: string[]; keepImages: number[] } = $props();
+    fixHomoglyphs = $bindable(),
+    fixApostrophes = $bindable(),
+    replaceSpecialSpaces = $bindable(),
+  }: {
+    report: Report;
+    removeIds: string[];
+    keepImages: number[];
+    fixHomoglyphs: boolean;
+    fixApostrophes: boolean;
+    replaceSpecialSpaces: boolean;
+  } = $props();
+  const s = $derived(report.suspicious);
+  const spaceCount = $derived(Object.values(s.specialSpaces).reduce((a, b) => a + b, 0));
+  const hasSuspicious = $derived(s.homoglyphs.length > 0 || s.apostrophes > 0 || spaceCount > 0);
 
   function toggleRemove(id: string, on: boolean) {
     removeIds = on ? [...removeIds, id] : removeIds.filter((x) => x !== id);
@@ -18,8 +31,34 @@
   const tagNames = { exif: "EXIF", xmp: "XMP", c2pa: "C2PA" } as const;
 </script>
 
-{#if report.phrases.length === 0 && report.images.length === 0}
+{#if report.phrases.length === 0 && report.images.length === 0 && !hasSuspicious}
   <p class="muted">{t("nothingToConfirm")}</p>
+{/if}
+
+{#if hasSuspicious}
+  <h3>{t("suspiciousTitle")}</h3>
+  <ul class="list" data-testid="suspicious">
+    {#if s.homoglyphs.length}
+      <li>
+        <span>{t("homoglyphsLabel", { n: s.homoglyphs.length })}</span>
+        <span class="muted small">{t("exampleFix", { from: s.homoglyphs[0].word, to: s.homoglyphs[0].fixed })}</span>
+        <label><input type="checkbox" bind:checked={fixHomoglyphs} /> {t("fixHomoglyphs")}</label>
+      </li>
+    {/if}
+    {#if s.apostrophes}
+      <li>
+        <span>{t("apostrophesLabel", { n: s.apostrophes })}</span>
+        <label><input type="checkbox" bind:checked={fixApostrophes} /> {t("fixApostrophes")}</label>
+      </li>
+    {/if}
+    {#if spaceCount}
+      <li>
+        <span>{t("specialSpacesLabel", { n: spaceCount })} <code>{Object.keys(s.specialSpaces).join(", ")}</code></span>
+        <label><input type="checkbox" bind:checked={replaceSpecialSpaces} /> {t("fixSpecialSpaces")}</label>
+        {#if replaceSpecialSpaces}<span class="warn-text small">{t("specialSpacesWarn")}</span>{/if}
+      </li>
+    {/if}
+  </ul>
 {/if}
 
 {#if report.phrases.length}
@@ -156,6 +195,15 @@
   }
   .context {
     overflow-wrap: anywhere;
+  }
+  code {
+    font-size: 12px;
+    background: var(--surface-muted);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .warn-text {
+    color: var(--warn-text);
   }
   .small {
     font-size: 13px;

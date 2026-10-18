@@ -7,5 +7,8 @@ export function hiddenTotal(r: Report): number {
 
 /** 檔案資料行顯示嘅「找到 N 項」：隱形字元當一項計 */
 export function findingCount(r: Report): number {
-  return r.visible.length + r.metadata.length + r.c2pa.length + (hiddenTotal(r) > 0 ? 1 : 0) + r.phrases.length;
+  const s = r.suspicious;
+  const suspicious =
+    (s.homoglyphs.length > 0 ? 1 : 0) + (s.apostrophes > 0 ? 1 : 0) + (Object.keys(s.specialSpaces).length > 0 ? 1 : 0);
+  return r.visible.length + r.metadata.length + r.c2pa.length + (hiddenTotal(r) > 0 ? 1 : 0) + r.phrases.length + suspicious;
 }

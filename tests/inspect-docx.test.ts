@@ -82,3 +82,14 @@ describe("inspectDocx：C2PA、圖片、可疑字句、隱形字元", () => {
     expect(r.hidden).toEqual({ removed: { "U+200B": 3 }, replaced: {}, kept: 1 });
   });
 });
+
+test("inspectDocx：可疑字元", async () => {
+  const r = await inspect({
+    body: p("Clаude said") + p("don\u02BCt") + p("a\u00A0b\u2009c") + `<w:p><m:oMath><m:r><m:t>Ο</m:t></m:r></m:oMath></w:p>`,
+  });
+  expect(r.suspicious).toEqual({
+    homoglyphs: [{ paragraphId: "document:1", word: "Clаude", fixed: "Claude" }],
+    apostrophes: 1,
+    specialSpaces: { "U+00A0": 1, "U+2009": 1 },
+  });
+});

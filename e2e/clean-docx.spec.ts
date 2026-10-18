@@ -11,7 +11,11 @@ test("拖入 Word → 報告 → 改選擇 → 下載乾淨檔案", async ({ pag
   await expect(page.getByText("把 Word 檔案拖到這裡")).toBeVisible();
 
   await page.getByTestId("file-input").setInputFiles("e2e/.fixtures/sample.docx");
-  await expect(page.getByTestId("found-count")).toHaveText("找到 6 項");
+  await expect(page.getByTestId("found-count")).toHaveText("找到 7 項");
+
+  // 可疑字元：「Clаude」入面嘅 а 係西里爾字母，預設換成英文字母
+  await expect(page.getByTestId("suspicious")).toContainText("同形字");
+  await expect(page.getByTestId("suspicious")).toContainText("Clаude → Claude");
 
   // 預設：可疑字句保留、圖片保留（清走圖片資料）
   const preview = page.getByTestId("preview");
@@ -34,7 +38,7 @@ test("拖入 Word → 報告 → 改選擇 → 下載乾淨檔案", async ({ pag
   expect(await selfCheckDocx(bytes, 1)).toEqual({ ok: true, problems: [] });
   const { doc } = await readDocx(bytes);
   // 頁首：文字保留；水印所在嘅段落保留但已清空（同原檔排版一致）
-  expect(allParagraphs(doc).map(paragraphText)).toEqual(["第一章", "營業額上升 12%", "季度報告", ""]);
+  expect(allParagraphs(doc).map(paragraphText)).toEqual(["第一章", "Claude summary", "營業額上升 12%", "季度報告", ""]);
   expect(allImages(doc)).toHaveLength(1); // 佔位圖
 });
 

@@ -1,4 +1,5 @@
 import { cleanText, hasRtl } from "../clean/hidden-chars";
+import { fixSuspicious, splitByLengths, type SuspiciousOptions } from "../clean/suspicious";
 import { paragraphIds } from "../ooxml/ids";
 import { kids, NS, type Element } from "../ooxml/xml";
 import { FIELDS } from "./policy";
@@ -83,9 +84,37 @@ function cleanHiddenChars(all: Element[]): void {
   }
 }
 
-export function prepass(root: Element, part: string, removeIds: Set<string>): void {
+/** 換可疑字元：按段落成段處理（一個字可能跨幾個格式段）；只處理內文 w:t，方程式唔郁 */
+function fixSuspiciousChars(all: Element[], opts: SuspiciousOptions): void {
+  const byParagraph = new Map<Element | null, Element[]>();
+  for (const el of all) {
+    if (el.namespaceURI !== NS.w || el.localName !== "t") continue;
+    const p = closestParagraph(el);
+    if (!byParagraph.has(p)) byParagraph.set(p, []);
+    byParagraph.get(p)!.push(el);
+  }
+  for (const nodes of byParagraph.values()) {
+    const texts = nodes.map((n) => n.textContent ?? "");
+    const joined = texts.join("");
+    const fixed = fixSuspicious(joined, opts);
+    if (fixed === joined) continue;
+    splitByLengths(fixed, texts.map((t) => t.length)).forEach((t, i) => {
+      if (t !== texts[i]) nodes[i].textContent = t;
+    });
+  }
+}
+
+/** 全文用直撇號定彎撇號多（俾 preferredApostrophe 用） */
+export function allBodyText(root: Element): string {
+  return Array.from(root.getElementsByTagNameNS(NS.w, "t"))
+    .map((t) => t.textContent ?? "")
+    .join("");
+}
+
+export function prepass(root: Element, part: string, removeIds: Set<string>, fix: SuspiciousOptions): void {
   removeParagraphs(root, part, removeIds);
   const all = allElements(root);
   filterFields(all);
+  fixSuspiciousChars(all, fix); // 一對一替換，要喺清隱形字元（會改長度）之前做
   cleanHiddenChars(all);
 }

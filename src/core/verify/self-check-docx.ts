@@ -1,3 +1,4 @@
+import type { SuspiciousOptions } from "../clean/suspicious";
 import { hasC2pa, imageTags } from "../inspect/bytes";
 import { inspectDocx } from "../inspect/docx";
 import { readOoxmlMetadata } from "../inspect/metadata";
@@ -12,7 +13,8 @@ export type ProblemCode =
   | "visible"
   | "c2pa"
   | "imageMetadata"
-  | "hiddenChars";
+  | "hiddenChars"
+  | "suspiciousChars";
 
 export interface Problem {
   code: ProblemCode;
@@ -40,7 +42,12 @@ const ALLOWED_PARTS: RegExp[] = [
 const ALLOWED_METADATA = new Set(["cp:revision", "dcterms:created", "dcterms:modified"]);
 
 /** expectedMedia：重新抄寫器話寫咗幾多張圖（保留嘅原圖 + 佔位圖） */
-export async function selfCheckDocx(bytes: Uint8Array, expectedMedia: number): Promise<SelfCheckResult> {
+/** fix：用家揀咗換邊啲可疑字元；揀咗嘅就唔應該仲喺新檔入面 */
+export async function selfCheckDocx(
+  bytes: Uint8Array,
+  expectedMedia: number,
+  fix: SuspiciousOptions = { homoglyphs: false, apostrophes: false, specialSpaces: false },
+): Promise<SelfCheckResult> {
   const problems: Problem[] = [];
   let read: Awaited<ReturnType<typeof readDocx>>;
   try {
@@ -71,9 +78,18 @@ export async function selfCheckDocx(bytes: Uint8Array, expectedMedia: number): P
     }
   }
 
-  const { hidden } = await inspectDocx(pkg, doc);
+  const { hidden, suspicious } = await inspectDocx(pkg, doc);
   const leftover = [...Object.entries(hidden.removed), ...Object.entries(hidden.replaced)];
   for (const [cp, n] of leftover) problems.push({ code: "hiddenChars", detail: `${cp}×${n}` });
+
+  if (fix.homoglyphs && suspicious.homoglyphs.length > 0) {
+    problems.push({ code: "suspiciousChars", detail: `homoglyphs×${suspicious.homoglyphs.length}` });
+  }
+  if (fix.apostrophes && suspicious.apostrophes > 0) {
+    problems.push({ code: "suspiciousChars", detail: `apostrophes×${suspicious.apostrophes}` });
+  }
+  const spaces = Object.values(suspicious.specialSpaces).reduce((a, b) => a + b, 0);
+  if (fix.specialSpaces && spaces > 0) problems.push({ code: "suspiciousChars", detail: `specialSpaces×${spaces}` });
 
   return { ok: problems.length === 0, problems };
 }

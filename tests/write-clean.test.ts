@@ -226,3 +226,30 @@ describe("writeCleanDocx：用家選擇", () => {
     expect(doc.media[second.mediaPath]).toEqual(PNG_1PX);
   });
 });
+
+describe("writeCleanDocx：可疑字元", () => {
+  // 「Cl」同「аude」喺唔同格式段（第二段粗體），а 係西里爾字母
+  const body =
+    `<w:p><w:r><w:t>Cl</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">аude don\u02BCt</w:t></w:r></w:p>` +
+    `<w:p><w:r><w:t xml:space="preserve">Fig. 1\u2003Caption\u00A0text</w:t></w:r></w:p>` +
+    `<w:p><m:oMath><m:r><m:t>Ο</m:t></m:r></m:oMath></w:p>`;
+
+  test("預設：同形字同撇號變體換走（跨格式段都得），特殊空格同方程式唔郁", async () => {
+    const out = await clean(await buildDocx({ body }));
+    const doc = (await readDocx(out)).doc;
+    expect(allParagraphs(doc).map(paragraphText)).toEqual(["Claude don\u2019t", "Fig. 1\u2003Caption\u00A0text", ""]);
+    const xml = await partText(out, "word/document.xml");
+    expect(xml).toContain("<m:t xml:space=\"preserve\">Ο</m:t>"); // 方程式入面嘅希臘字母保留
+    expect(xml).toContain("<w:b/>"); // 格式段保留
+  });
+
+  test("揀咗先換特殊空格", async () => {
+    const out = await clean(await buildDocx({ body }), { removeParagraphs: [], keepImages: [], replaceSpecialSpaces: true });
+    expect(allParagraphs((await readDocx(out)).doc).map(paragraphText)[1]).toBe("Fig. 1 Caption text");
+  });
+
+  test("可以關閉同形字同撇號替換", async () => {
+    const out = await clean(await buildDocx({ body }), { removeParagraphs: [], keepImages: [], fixHomoglyphs: false, fixApostrophes: false });
+    expect(allParagraphs((await readDocx(out)).doc).map(paragraphText)[0]).toBe("Clаude don\u02BCt");
+  });
+});

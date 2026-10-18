@@ -4,7 +4,8 @@ import { partName } from "../ooxml/ids";
 import type { OoxmlPackage, Relationship } from "../ooxml/package";
 import type { Element } from "../ooxml/xml";
 import { placeholderPng, stripImageMetadata } from "./images";
-import { prepass } from "./prepass";
+import { preferredApostrophe, suspiciousOptions } from "../clean/suspicious";
+import { allBodyText, prepass } from "./prepass";
 import { serializePart, type ImageRequest, type SerializeCtx } from "./serialize";
 
 const MAIN = "word/document.xml";
@@ -79,6 +80,10 @@ export async function writeCleanDocx(pkg: OoxmlPackage, choices: Choices): Promi
   const docRels = new Rels();
   const docRelsOld = await pkg.rels(MAIN);
   const removeIds = new Set(choices.removeParagraphs);
+  const docRoot = await pkg.xml(MAIN);
+  if (!docRoot) throw new Error("word/document.xml 唔存在");
+  // 撇號跟返全文多數用嘅款式
+  const fix = suspiciousOptions(choices, preferredApostrophe(allBodyText(docRoot)));
   const keep = new Set(choices.keepImages);
   const dropped = new Map<string, number>();
   const overrides: [string, string][] = [];
@@ -137,7 +142,7 @@ export async function writeCleanDocx(pkg: OoxmlPackage, choices: Choices): Promi
   async function writePart(oldPath: string, newName: string, ctx: SerializeCtx, rels: Rels | null): Promise<boolean> {
     const root = await pkg.xml(oldPath);
     if (!root) return false;
-    prepass(root, partName(oldPath), removeIds);
+    prepass(root, partName(oldPath), removeIds, fix);
     zip.file(`word/${newName}`, await serializePart(root, ctx));
     if (rels && rels.size > 0) {
       const base = newName.slice(newName.lastIndexOf("/") + 1);
@@ -178,8 +183,6 @@ export async function writeCleanDocx(pkg: OoxmlPackage, choices: Choices): Promi
     return id;
   };
   // serializePart 係同步遞迴，所以頁首頁尾要預先處理：先掃描所有引用
-  const docRoot = await pkg.xml(MAIN);
-  if (!docRoot) throw new Error("word/document.xml 唔存在");
   const hfIds = new Map<string, string>();
   for (const ref of ["headerReference", "footerReference"]) {
     for (const el of Array.from(docRoot.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", ref))) {
@@ -192,7 +195,7 @@ export async function writeCleanDocx(pkg: OoxmlPackage, choices: Choices): Promi
   }
   mainCtx.headerFooter = (old) => hfIds.get(old) ?? null;
 
-  prepass(docRoot, "document", removeIds);
+  prepass(docRoot, "document", removeIds, fix);
   zip.file("word/document.xml", await serializePart(docRoot, mainCtx));
   zip.file("word/_rels/document.xml.rels", docRels.xml());
 

@@ -25,11 +25,16 @@
   let analysis = $state.raw<AnalyzeResult | null>(null);
   let removeIds = $state<string[]>([]);
   let keepImages = $state<number[]>([]);
+  // 可疑字元：同形字同撇號預設換；特殊空格預設唔換（好多時係正常排版）
+  let fixHomoglyphs = $state(true);
+  let fixApostrophes = $state(true);
+  let replaceSpecialSpaces = $state(false);
+  const choices = $derived({ removeParagraphs: removeIds, keepImages, fixHomoglyphs, fixApostrophes, replaceSpecialSpaces });
   let built = $state.raw<BuildResult | null>(null);
   let error = $state<{ code: string; problems: { code: string; detail: string }[] } | null>(null);
 
   const report = $derived<Report | null>(analysis?.report ?? null);
-  const previewDoc = $derived(analysis ? applyChoices(analysis.doc, { removeParagraphs: removeIds, keepImages }) : null);
+  const previewDoc = $derived(analysis ? applyChoices(analysis.doc, choices) : null);
 
   function fail(e: unknown) {
     if (!(e instanceof WorkerError)) console.error(e);
@@ -55,8 +60,7 @@
 
   // 用家改咗選擇，之前整好嘅檔案就作廢。只追蹤選擇，唔追蹤 phase
   $effect(() => {
-    $state.snapshot(removeIds);
-    $state.snapshot(keepImages);
+    $state.snapshot(choices);
     untrack(() => {
       if (phase === "done") {
         built = null;
@@ -69,8 +73,7 @@
     phase = "building";
     try {
       // $state 係 Proxy，postMessage 複製唔到，要先轉做普通陣列
-      const choices = $state.snapshot({ removeParagraphs: removeIds, keepImages });
-      built = await worker.build(choices);
+      built = await worker.build($state.snapshot(choices));
       phase = "done";
       download();
     } catch (e) {
@@ -98,6 +101,9 @@
     analysis = null;
     removeIds = [];
     keepImages = [];
+    fixHomoglyphs = true;
+    fixApostrophes = true;
+    replaceSpecialSpaces = false;
     built = null;
     error = null;
   }
@@ -120,7 +126,7 @@
       <ReportPanel {report} />
     </Section>
     <Section step={2} title={t("confirmTitle")}>
-      <ConfirmPanel {report} bind:removeIds bind:keepImages />
+      <ConfirmPanel {report} bind:removeIds bind:keepImages bind:fixHomoglyphs bind:fixApostrophes bind:replaceSpecialSpaces />
     </Section>
     <Section step={3} title={t("previewTitle")}>
       <Preview doc={previewDoc} />
